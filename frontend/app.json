@@ -6,12 +6,6 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/splash-icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#07122b"
-    },
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mappin.app"
@@ -40,7 +34,25 @@
           "locationWhenInUsePermission": "Allow MapPin to use your location to center the map."
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Allow MapPin to use the camera to take photos of your places.",
+          "photosPermission": false,
+          "microphonePermission": false
+        }
+      ],
+      "expo-status-bar",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200,
+          "resizeMode": "contain",
+          "backgroundColor": "#07122b"
+        }
+      ]
     ],
     "extra": {
       "eas": {

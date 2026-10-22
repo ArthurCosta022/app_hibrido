@@ -1,7 +1,10 @@
-import React, { useEffect, useState } from 'react';
+import * as ImagePicker from 'expo-image-picker';
+import React, { useEffect, useReducer, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -11,6 +14,16 @@ import {
   View,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import {
+  PHOTO_STATUS,
+  createInitialPhotoState,
+  describeCameraPermission,
+  interpretCaptureResult,
+  photoFlowReducer,
+} from '../services/photoFlow';
+
+// A foto usa a câmera e o armazenamento do dispositivo; não existe na versão web.
+const PHOTO_SUPPORTED = Platform.OS !== 'web';
 
 export default function PinFormModal({ visible, coordinate, pin, onCancel, onDelete, onSubmit }) {
   const { colors } = useTheme();
@@ -18,7 +31,12 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
   const [description, setDescription] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [photoFlow, dispatchPhoto] = useReducer(photoFlowReducer, undefined, () =>
+    createInitialPhotoState(pin?.photoUri),
+  );
+  const [photoUnavailable, setPhotoUnavailable] = useState(false);
   const isEditing = Boolean(pin);
+  const photoBusy = photoFlow.status !== PHOTO_STATUS.IDLE;
 
   useEffect(() => {
     if (visible) {
@@ -26,8 +44,46 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
       setDescription(pin?.description || '');
       setError('');
       setSaving(false);
+      dispatchPhoto({ type: 'RESET', photoUri: pin?.photoUri });
+      setPhotoUnavailable(false);
     }
   }, [pin, visible]);
+
+  async function captureWithCamera() {
+    try {
+      const access = describeCameraPermission(await ImagePicker.requestCameraPermissionsAsync());
+      if (!access.granted) {
+        dispatchPhoto({
+          type: 'PERMISSION_DENIED',
+          message: access.message,
+          canOpenSettings: access.canOpenSettings,
+        });
+        return;
+      }
+
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: false,
+        mediaTypes: ['images'],
+        quality: 0.7,
+      });
+      const outcome = interpretCaptureResult(result);
+      if (outcome.type === 'captured') dispatchPhoto({ type: 'CAPTURE_SUCCEEDED', uri: outcome.uri });
+      else if (outcome.type === 'cancelled') dispatchPhoto({ type: 'CAPTURE_CANCELLED' });
+      else dispatchPhoto({ type: 'CAPTURE_FAILED' });
+    } catch (_error) {
+      dispatchPhoto({ type: 'CAPTURE_FAILED' });
+    }
+  }
+
+  function startCapture() {
+    dispatchPhoto({ type: 'REQUEST_CAPTURE' });
+    captureWithCamera();
+  }
+
+  function retakePhoto() {
+    dispatchPhoto({ type: 'RETAKE' });
+    captureWithCamera();
+  }
 
   async function handleSave() {
     const trimmedName = name.trim();
@@ -44,7 +100,12 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
     try {
       setSaving(true);
       setError('');
-      await onSubmit({ name: trimmedName, description: trimmedDescription, ...coordinate });
+      await onSubmit({
+        name: trimmedName,
+        description: trimmedDescription,
+        photoUri: photoFlow.photoUri,
+        ...coordinate,
+      });
     } catch (submitError) {
       setError(submitError.message || 'Não foi possível salvar o lugar.');
       setSaving(false);
@@ -121,6 +182,120 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
             value={description}
           />
 
+          {PHOTO_SUPPORTED ? (
+            <View style={styles.photoSection}>
+              <View style={styles.labelRow}>
+                <Text style={[styles.label, { color: colors.text }]}>Foto</Text>
+                <Text style={[styles.counter, { color: colors.textMuted }]}>opcional</Text>
+              </View>
+
+              {photoFlow.status === PHOTO_STATUS.PREVIEW ? (
+                <View>
+                  <Image
+                    accessibilityLabel="Prévia da foto capturada"
+                    resizeMode="cover"
+                    source={{ uri: photoFlow.draftUri }}
+                    style={[styles.photo, { backgroundColor: colors.surfaceMuted }]}
+                  />
+                  <View style={styles.photoActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={retakePhoto}
+                      style={({ pressed }) => [styles.photoButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      <Text style={[styles.photoButtonText, { color: colors.text }]}>Refazer</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => dispatchPhoto({ type: 'DISCARD' })}
+                      style={({ pressed }) => [styles.photoButton, { borderColor: colors.border, opacity: pressed ? 0.6 : 1 }]}
+                    >
+                      <Text style={[styles.photoButtonText, { color: colors.text }]}>Descartar</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      onPress={() => dispatchPhoto({ type: 'CONFIRM' })}
+                      style={({ pressed }) => [
+                        styles.photoButton,
+                        { backgroundColor: pressed ? colors.primaryPressed : colors.primary, borderColor: colors.primary },
+                      ]}
+                    >
+                      <Text style={[styles.photoButtonText, { color: colors.onPrimary }]}>Usar esta foto</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : photoFlow.photoUri ? (
+                <View>
+                  {photoUnavailable ? (
+                    <View style={[styles.photo, styles.photoPlaceholder, { backgroundColor: colors.surfaceMuted }]}>
+                      <Text style={[styles.photoMessage, { color: colors.textMuted }]}>
+                        Não foi possível carregar a foto salva.
+                      </Text>
+                    </View>
+                  ) : (
+                    <Image
+                      accessibilityLabel="Foto do lugar"
+                      onError={() => setPhotoUnavailable(true)}
+                      resizeMode="cover"
+                      source={{ uri: photoFlow.photoUri }}
+                      style={[styles.photo, { backgroundColor: colors.surfaceMuted }]}
+                    />
+                  )}
+                  <View style={styles.photoActions}>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={photoBusy || saving}
+                      onPress={() => {
+                        setPhotoUnavailable(false);
+                        startCapture();
+                      }}
+                      style={({ pressed }) => [styles.photoButton, { borderColor: colors.border, opacity: pressed || saving ? 0.6 : 1 }]}
+                    >
+                      <Text style={[styles.photoButtonText, { color: colors.text }]}>Tirar outra foto</Text>
+                    </Pressable>
+                    <Pressable
+                      accessibilityRole="button"
+                      disabled={photoBusy || saving}
+                      onPress={() => dispatchPhoto({ type: 'REMOVE' })}
+                      style={({ pressed }) => [styles.photoButton, { borderColor: colors.border, opacity: pressed || saving ? 0.6 : 1 }]}
+                    >
+                      <Text style={[styles.photoButtonText, { color: colors.danger }]}>Remover foto</Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : (
+                <Pressable
+                  accessibilityRole="button"
+                  disabled={photoBusy || saving}
+                  onPress={startCapture}
+                  style={({ pressed }) => [
+                    styles.addPhoto,
+                    { backgroundColor: colors.surfaceMuted, borderColor: colors.border, opacity: pressed || saving ? 0.6 : 1 },
+                  ]}
+                >
+                  {photoFlow.status === PHOTO_STATUS.CAPTURING ? (
+                    <ActivityIndicator color={colors.primary} size="small" />
+                  ) : (
+                    <Text style={[styles.photoButtonText, { color: colors.text }]}>Adicionar foto</Text>
+                  )}
+                </Pressable>
+              )}
+
+              {photoFlow.message ? (
+                <Text style={[styles.photoMessage, { color: colors.danger }]}>{photoFlow.message}</Text>
+              ) : null}
+              {photoFlow.canOpenSettings ? (
+                <Pressable
+                  accessibilityRole="button"
+                  onPress={() => Linking.openSettings().catch(() => {})}
+                  style={({ pressed }) => [styles.settingsLink, { opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text style={[styles.photoButtonText, { color: colors.primary }]}>Abrir configurações</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : null}
+
           {error ? (
             <View style={[styles.errorBox, { backgroundColor: colors.surfaceMuted, borderColor: colors.danger }]}>
               <Text style={[styles.error, { color: colors.danger }]}>{error}</Text>
@@ -141,7 +316,7 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
             <View style={styles.primaryActions}>
             <Pressable
               accessibilityRole="button"
-              disabled={saving}
+              disabled={saving || photoFlow.status === PHOTO_STATUS.CAPTURING}
               onPress={onCancel}
               style={({ pressed }) => [styles.action, { opacity: pressed || saving ? 0.6 : 1 }]}
             >
@@ -149,7 +324,7 @@ export default function PinFormModal({ visible, coordinate, pin, onCancel, onDel
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              disabled={saving}
+              disabled={saving || photoBusy}
               onPress={handleSave}
               style={({ pressed }) => [
                 styles.action,
@@ -209,6 +384,15 @@ const styles = StyleSheet.create({
   primaryActions: { flexDirection: 'row', marginLeft: 'auto' },
   action: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', justifyContent: 'center', minHeight: 46, minWidth: 98, paddingHorizontal: 17 },
   save: { marginLeft: 9, minWidth: 126 },
+  photoSection: { marginTop: 4 },
+  photo: { borderRadius: 12, height: 160, width: '100%' },
+  photoPlaceholder: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  photoActions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  photoButton: { alignItems: 'center', borderRadius: 10, borderWidth: 1, justifyContent: 'center', minHeight: 40, paddingHorizontal: 12 },
+  photoButtonText: { fontSize: 13, fontWeight: '700' },
+  addPhoto: { alignItems: 'center', borderRadius: 12, borderStyle: 'dashed', borderWidth: 1, justifyContent: 'center', minHeight: 56 },
+  photoMessage: { fontSize: 12, lineHeight: 17, marginTop: 8 },
+  settingsLink: { alignSelf: 'flex-start', justifyContent: 'center', marginTop: 6, minHeight: 40 },
   deleteAction: { justifyContent: 'center', minHeight: 44, paddingHorizontal: 6 },
   deleteText: { fontSize: 14, fontWeight: '700' },
   cancelText: { fontSize: 15, fontWeight: '600' },

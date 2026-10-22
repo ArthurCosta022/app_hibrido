@@ -6,6 +6,7 @@ const PIN_SCHEMA_SQL = `
     description TEXT NOT NULL CHECK(length(trim(description)) BETWEEN 1 AND 500),
     latitude REAL NOT NULL CHECK(latitude BETWEEN -90 AND 90),
     longitude REAL NOT NULL CHECK(longitude BETWEEN -180 AND 180),
+    photo_uri TEXT,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
   );
@@ -16,20 +17,30 @@ const PIN_SCHEMA_SQL = `
   );
 `;
 
+// Bancos criados antes da evolução da foto não têm a coluna photo_uri.
+const TABLE_INFO_SQL = 'PRAGMA table_info(pins)';
+const ADD_PHOTO_COLUMN_SQL = 'ALTER TABLE pins ADD COLUMN photo_uri TEXT';
+
+function needsPhotoColumn(columns) {
+  return !Array.isArray(columns) || !columns.some((column) => column?.name === 'photo_uri');
+}
+
+const MAX_PHOTO_URI_LENGTH = 1000;
+
 const PIN_QUERIES = Object.freeze({
-  list: `SELECT id, name, description, latitude, longitude, created_at, updated_at
+  list: `SELECT id, name, description, latitude, longitude, photo_uri, created_at, updated_at
            FROM pins
           ORDER BY created_at DESC`,
-  byId: `SELECT id, name, description, latitude, longitude, created_at, updated_at
+  byId: `SELECT id, name, description, latitude, longitude, photo_uri, created_at, updated_at
            FROM pins WHERE id = ?`,
   insert: `INSERT INTO pins
-            (id, name, description, latitude, longitude, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            (id, name, description, latitude, longitude, photo_uri, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   insertOrIgnore: `INSERT OR IGNORE INTO pins
-            (id, name, description, latitude, longitude, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+            (id, name, description, latitude, longitude, photo_uri, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
   update: `UPDATE pins
-              SET name = ?, description = ?, latitude = ?, longitude = ?, updated_at = ?
+              SET name = ?, description = ?, latitude = ?, longitude = ?, photo_uri = ?, updated_at = ?
             WHERE id = ?`,
   delete: 'DELETE FROM pins WHERE id = ?',
 });
@@ -59,7 +70,20 @@ function validatePin(fields) {
     throw new Error('A longitude informada é inválida.');
   }
 
-  return { name, description, latitude, longitude };
+  const rawPhotoUri = fields?.photoUri;
+  let photoUri = null;
+  if (rawPhotoUri !== undefined && rawPhotoUri !== null) {
+    if (
+      typeof rawPhotoUri !== 'string' ||
+      !rawPhotoUri.trim() ||
+      rawPhotoUri.length > MAX_PHOTO_URI_LENGTH
+    ) {
+      throw new Error('A foto informada é inválida.');
+    }
+    photoUri = rawPhotoUri;
+  }
+
+  return { name, description, latitude, longitude, photoUri };
 }
 
 function rowToPin(row) {
@@ -69,9 +93,18 @@ function rowToPin(row) {
     description: row.description,
     latitude: row.latitude,
     longitude: row.longitude,
+    photoUri: row.photo_uri ?? null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
 }
 
-module.exports = { PIN_QUERIES, PIN_SCHEMA_SQL, rowToPin, validatePin };
+module.exports = {
+  ADD_PHOTO_COLUMN_SQL,
+  PIN_QUERIES,
+  PIN_SCHEMA_SQL,
+  TABLE_INFO_SQL,
+  needsPhotoColumn,
+  rowToPin,
+  validatePin,
+};

@@ -5,8 +5,11 @@ const { join } = require('node:path');
 const { afterEach, beforeEach, test } = require('node:test');
 const { DatabaseSync } = require('node:sqlite');
 const {
+  ADD_PHOTO_COLUMN_SQL,
   PIN_QUERIES,
   PIN_SCHEMA_SQL,
+  TABLE_INFO_SQL,
+  needsPhotoColumn,
   rowToPin,
   validatePin,
 } = require('../src/services/pinModel');
@@ -34,6 +37,7 @@ function insertPin(id, fields, timestamp) {
     pin.description,
     pin.latitude,
     pin.longitude,
+    pin.photoUri,
     timestamp,
     timestamp,
   );
@@ -91,6 +95,7 @@ test('mantém edição e exclusão depois de novas reaberturas', () => {
     updated.description,
     updated.latitude,
     updated.longitude,
+    updated.photoUri,
     '2026-09-15T12:00:00.000Z',
     'pin-1',
   );
@@ -116,4 +121,106 @@ test('rejeita dados inválidos antes de gravar no SQLite', () => {
     () => validatePin({ name: 'Teste', description: 'Teste', latitude: 91, longitude: 0 }),
     /latitude/,
   );
+});
+
+test('mantém a foto associada depois de fechar e reabrir o banco', () => {
+  insertPin(
+    'pin-foto',
+    {
+      name: 'Mirante',
+      description: 'Vista da cidade',
+      latitude: -22.9,
+      longitude: -43.2,
+      photoUri: 'file:///documentos/pin-photos/pin-foto.jpg',
+    },
+    '2026-10-22T10:00:00.000Z',
+  );
+  insertPin(
+    'pin-sem-foto',
+    { name: 'Padaria', description: 'Pão quente', latitude: -22.8, longitude: -43.1 },
+    '2026-10-22T09:00:00.000Z',
+  );
+
+  closeDatabase();
+  openDatabase();
+
+  const withPhoto = rowToPin(database.prepare(PIN_QUERIES.byId).get('pin-foto'));
+  const withoutPhoto = rowToPin(database.prepare(PIN_QUERIES.byId).get('pin-sem-foto'));
+  assert.equal(withPhoto.photoUri, 'file:///documentos/pin-photos/pin-foto.jpg');
+  assert.equal(withoutPhoto.photoUri, null);
+});
+
+test('remover a foto na edição limpa a coluna sem apagar o lugar', () => {
+  insertPin(
+    'pin-1',
+    {
+      name: 'Praça',
+      description: 'Com foto',
+      latitude: -23,
+      longitude: -43,
+      photoUri: 'file:///documentos/pin-photos/pin-1.jpg',
+    },
+    '2026-10-22T10:00:00.000Z',
+  );
+  const edited = validatePin({ name: 'Praça', description: 'Sem foto', latitude: -23, longitude: -43, photoUri: null });
+  database.prepare(PIN_QUERIES.update).run(
+    edited.name,
+    edited.description,
+    edited.latitude,
+    edited.longitude,
+    edited.photoUri,
+    '2026-10-22T11:00:00.000Z',
+    'pin-1',
+  );
+
+  closeDatabase();
+  openDatabase();
+  const pin = rowToPin(database.prepare(PIN_QUERIES.byId).get('pin-1'));
+  assert.equal(pin.photoUri, null);
+  assert.equal(pin.description, 'Sem foto');
+});
+
+test('valida o campo da foto', () => {
+  assert.equal(validatePin({ name: 'A', description: 'B', latitude: 0, longitude: 0 }).photoUri, null);
+  assert.equal(validatePin({ name: 'A', description: 'B', latitude: 0, longitude: 0, photoUri: null }).photoUri, null);
+  assert.throws(
+    () => validatePin({ name: 'A', description: 'B', latitude: 0, longitude: 0, photoUri: '   ' }),
+    /foto/,
+  );
+  assert.throws(
+    () => validatePin({ name: 'A', description: 'B', latitude: 0, longitude: 0, photoUri: 42 }),
+    /foto/,
+  );
+  assert.throws(
+    () => validatePin({ name: 'A', description: 'B', latitude: 0, longitude: 0, photoUri: 'x'.repeat(1001) }),
+    /foto/,
+  );
+});
+
+test('migra um banco da versão anterior (sem photo_uri) preservando os lugares', () => {
+  closeDatabase();
+  const legacy = new DatabaseSync(join(temporaryDirectory, 'legacy.db'));
+  legacy.exec(`
+    CREATE TABLE pins (
+      id TEXT PRIMARY KEY NOT NULL,
+      name TEXT NOT NULL,
+      description TEXT NOT NULL,
+      latitude REAL NOT NULL,
+      longitude REAL NOT NULL,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+  `);
+  legacy
+    .prepare('INSERT INTO pins VALUES (?, ?, ?, ?, ?, ?, ?)')
+    .run('antigo', 'Casa', 'Cadastrado na v1', -22.9, -43.1, '2026-09-01T10:00:00.000Z', '2026-09-01T10:00:00.000Z');
+
+  assert.equal(needsPhotoColumn(legacy.prepare(TABLE_INFO_SQL).all()), true);
+  legacy.exec(ADD_PHOTO_COLUMN_SQL);
+  assert.equal(needsPhotoColumn(legacy.prepare(TABLE_INFO_SQL).all()), false);
+
+  const migrated = rowToPin(legacy.prepare(PIN_QUERIES.byId).get('antigo'));
+  assert.equal(migrated.name, 'Casa');
+  assert.equal(migrated.photoUri, null);
+  legacy.close();
 });
