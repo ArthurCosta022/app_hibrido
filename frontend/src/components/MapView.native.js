@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { WebView } from 'react-native-webview';
 import { useTheme } from '../context/ThemeContext';
 
@@ -710,23 +710,33 @@ export default function PlatformMap({
     onExternalMapStatusChange('unavailable');
   }
 
+  // O WKWebView pode encerrar seu processo de conteúdo quando o iOS precisa de memória.
+  // Recarregar preserva os pins, que continuam no SQLite local, e restaura o mapa quando possível.
+  function handleContentProcessTermination() {
+    handleWebViewError();
+    webViewRef.current?.reload();
+  }
+
   return (
     <View style={styles.container}>
       <WebView
         applicationNameForUserAgent="MapPin/1.0 (com.mappin.app)"
         cacheEnabled
-        cacheMode="LOAD_DEFAULT"
+        cacheMode={Platform.OS === 'android' ? 'LOAD_DEFAULT' : undefined}
         domStorageEnabled
         javaScriptEnabled
         key={documentKey}
-        mixedContentMode="never"
+        mixedContentMode={Platform.OS === 'android' ? 'never' : undefined}
+        onContentProcessDidTerminate={
+          Platform.OS === 'ios' ? handleContentProcessTermination : undefined
+        }
         onError={handleWebViewError}
         onMessage={handleMessage}
         originWhitelist={['*']}
-        overScrollMode="never"
+        overScrollMode={Platform.OS === 'android' ? 'never' : undefined}
         ref={webViewRef}
         scrollEnabled={false}
-        setSupportMultipleWindows={false}
+        setSupportMultipleWindows={Platform.OS === 'android' ? false : undefined}
         source={{ html: mapHtml, baseUrl: 'https://www.openstreetmap.org/' }}
         style={[styles.webMap, { backgroundColor: colors.background }]}
       />

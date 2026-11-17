@@ -1,0 +1,15 @@
+executar no ios
+
+cmd.exe /k abrir-expo-go-ios.cmd
+
+
+ou
+
+
+$env:Path = "C:\Program Files\nodejs;$env:Path"
+& "C:\Program Files\nodejs\npx.cmd" expo login --no-browser
+
+
+verificação
+
+& "C:\Program Files\nodejs\npx.cmd" expo whoami

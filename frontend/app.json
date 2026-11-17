@@ -8,7 +8,8 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.mappin.app"
+      "bundleIdentifier": "com.mappin.app",
+      "buildNumber": "1"
     },
     "android": {
       "package": "com.mappin.app",
@@ -31,14 +32,14 @@
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Allow MapPin to use your location to center the map."
+          "locationWhenInUsePermission": "O MapPin usa sua localização para centralizar o mapa na sua posição atual."
         }
       ],
       "expo-sqlite",
       [
         "expo-image-picker",
         {
-          "cameraPermission": "Allow MapPin to use the camera to take photos of your places.",
+          "cameraPermission": "O MapPin usa a câmera para registrar fotos dos seus lugares.",
           "photosPermission": false,
           "microphonePermission": false
         }

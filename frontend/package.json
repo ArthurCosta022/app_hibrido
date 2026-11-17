@@ -11,6 +11,7 @@
     "export:web": "expo export --platform web",
     "build:web": "expo export --platform web && workbox generateSW workbox-config.js",
     "build:apk": "npx eas-cli build --platform android --profile preview",
+    "build:ios": "npx eas-cli build --platform ios --profile preview",
     "serve:web": "serve dist --config ../serve.json",
     "test": "node --test test/*.test.cjs"
   },

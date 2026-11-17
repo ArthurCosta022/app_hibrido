@@ -8,9 +8,11 @@
   "scripts": {
     "install:all": "npm install --workspaces",
     "dev:frontend": "npm run start --workspace frontend",
+    "expo-go:ios": "npm run start --workspace frontend -- --tunnel",
     "test": "npm test --workspace frontend",
     "build:web": "npm run build:web --workspace frontend",
-    "build:apk": "npm run build:apk --workspace frontend"
+    "build:apk": "npm run build:apk --workspace frontend",
+    "build:ios": "npm run build:ios --workspace frontend"
   },
   "engines": {
     "node": ">=22.13.0"

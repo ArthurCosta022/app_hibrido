@@ -14,7 +14,7 @@ Aplicativo de mapa pessoal e privado feito com Expo/React Native para Android, i
 
 ## Executar
 
-Requer Node.js 22.5 ou superior e npm.
+Requer Node.js 22.13 ou superior e npm.
 
 ```bash
 npm install
@@ -22,15 +22,17 @@ npm run dev:frontend
 ```
 
 No Expo, pressione `w`, `a` ou `i` para abrir na web, Android ou iOS.
+Para abrir no Expo Go do iPhone, execute somente `abrir-expo-go-ios.cmd`. Em um computador novo, ele chama o preparador automaticamente para instalar o Node.js LTS e baixar as dependências travadas; depois pede usuário e senha da Expo diretamente no terminal, confirma o login e inicia o QR Code. Use a mesma conta no iPhone e mantenha a janela do terminal aberta.
 
 ## Builds
 
 ```bash
 npm run build:web
 npm run build:apk
+npm run build:ios
 ```
 
-O APK instalável mais recente está em [`artifacts/MapPin-1.0.0-atualizado.apk`](artifacts/MapPin-1.0.0-atualizado.apk). Os dados de assinatura e SHA-256 estão em [`artifacts/README.md`](artifacts/README.md).
+O arquivo `artifacts/MapPin V1.apk` foi recebido junto ao projeto e é mantido como artefato legado. Ele não foi reconstruído nesta revisão; gere um novo APK após validar o projeto com `npm run build:apk`. Consulte `artifacts/README.md` para a identificação do arquivo recebido.
 
 ## Offline e privacidade
 
@@ -40,9 +42,11 @@ Os lugares são gravados no banco local `mappin.db` e continuam disponíveis sem
 
 - [`docs/plano-evolucao.md`](docs/plano-evolucao.md): necessidade, critérios de aceitação e plano de testes.
 - [`docs/aula-2.md`](docs/aula-2.md): primeiro fluxo, técnicas de teste, execuções e pendências.
+- [`docs/auditoria-inicial.md`](docs/auditoria-inicial.md): diagnóstico da base recebida e limites da auditoria.
 - [`docs/testes/`](docs/testes/): planilha com casos, execuções e defeitos.
 
 A foto usa um plugin nativo: depois de atualizar, rode `npm install` e gere um novo build (`npm run build:apk`).
+Para apresentar em um iPhone, siga o roteiro em [`docs/ios-apresentacao.md`](docs/ios-apresentacao.md) e gere uma distribuição iOS nova com `npm run build:ios`.
 
 ## Verificação
 

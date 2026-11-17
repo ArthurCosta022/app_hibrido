@@ -9,3 +9,7 @@ coverage/
 # Pacote legado local; a entrega atual fica em artifacts/.
 artifacts.zip
 
+# Segredos locais e credenciais de assinatura
+frontend/credentials.json
+*.keystore
+*.jks

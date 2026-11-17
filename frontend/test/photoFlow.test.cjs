@@ -147,3 +147,31 @@ test('planeja o que fazer com o arquivo ao salvar', () => {
   assert.equal(planPhotoChange(EXISTING, DRAFT).action, 'replace');
   assert.equal(planPhotoChange(EXISTING, null).action, 'remove');
 });
+
+test('permissão bloqueada orienta a abrir configurações sem alterar a foto', () => {
+  const access = describeCameraPermission({ granted: false, canAskAgain: false });
+  assert.equal(access.granted, false);
+  assert.equal(access.canOpenSettings, true);
+  assert.match(access.message, /configurações do sistema/);
+
+  const state = run(
+    createInitialPhotoState(EXISTING),
+    { type: 'REQUEST_CAPTURE' },
+    { type: 'PERMISSION_DENIED', message: access.message, canOpenSettings: access.canOpenSettings },
+  );
+  assert.equal(state.status, PHOTO_STATUS.IDLE);
+  assert.equal(state.photoUri, EXISTING);
+  assert.equal(state.canOpenSettings, true);
+});
+
+test('cancelamento retornado pelo ImagePicker não produz URI para associação', () => {
+  const outcome = interpretCaptureResult({ canceled: true, assets: [] });
+  assert.deepEqual(outcome, { type: 'cancelled' });
+  const state = run(
+    createInitialPhotoState(EXISTING),
+    { type: 'REQUEST_CAPTURE' },
+    { type: 'CAPTURE_CANCELLED' },
+  );
+  assert.equal(state.photoUri, EXISTING);
+  assert.equal(state.draftUri, null);
+});
